@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "sl_vit2"
+version = "0.1.0"
+description = ""
+authors = ["Mine268 <mine268@foxmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = {version = "^2.6.0", extras = ["cuda"]}
+numpy = "^2.2.3"
+einops = "^0.8.1"
+tensorboard = "^2.19.0"
+matplotlib = "^3.10.0"
+typing-extensions = "^4.12.2"
+transformers = "^4.49.0"
+ipython = "^8.32.0"
+tqdm = "^4.67.1"
+scipy = "^1.15.2"
+PyYAML = "^6.0.2"
+debugpy = "^1.8.12"
+jupyterlab = "^4.3.5"
+typeguard = "^4.4.2"
+open3d = "^0.19.0"
+smplx = "^0.1.28"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
