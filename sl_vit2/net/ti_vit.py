@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Optional
 from itertools import product
 
@@ -5,8 +6,8 @@ from einops import reduce
 import torch
 import torch.nn as nn
 from torchvision import transforms
-from transformers import ViTMAEForPreTraining, ViTMAEModel, ViTConfig
-from transformers import ViTPreTrainedModel, ViTModel
+from transformers import ViTConfig
+from transformers import ViTModel
 
 from .latent_transformers import ImageLatentTransformerGroup
 from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img
@@ -97,8 +98,12 @@ class TI_ViT(nn.Module):
                     [None, b1, b2]),
             ):
                 images_trans = op2(op1(images_norm, p1), p2)
+                composed_op = self.trans_grp.compose(
+                    partial(t_op1, angle_rad=p1),
+                    partial(t_op2, angle_rad=p2)
+                )
                 delta_trans = self.backbone(images_trans).last_hidden_state[:, 1:] - \
-                    t_op2(t_op1(patches_origin, p1), p2)
+                    composed_op(patches_origin)
                 loss_secondary += reduce(delta_trans.abs(), "b l d -> b", reduction="mean").mean()
 
         loss = loss_ordinary + 1e-3 * loss_secondary
