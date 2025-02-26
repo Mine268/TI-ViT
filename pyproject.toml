@@ -25,6 +25,7 @@ smplx = "^0.1.28"
 torchvision = "^0.21.0"
 pytest = "^8.3.4"
 opencv-python = "^4.11.0"
+kornia = "^0.8.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.2.0"

@@ -72,3 +72,11 @@ def test_LatentTransforms1_compose():
         trans_grp.compose(hr1, cr2).keywords["angle_rad"].allclose(torch.tensor([-3.0, 1.0])))
     assert(trans_grp.compose(hr1, hr2).func == trans_grp.do_cr and \
         trans_grp.compose(hr1, hr2).keywords["angle_rad"].allclose(torch.tensor([0.0, 2.0])))
+
+
+def test_TI_ViT_forward_loss():
+    net = TI_ViT("./models/facebook/converted-vit-base").cuda(1)
+    x = torch.zeros(size=[4,3,224,224]).cuda(1)
+
+    print(net.forward_loss(x, False))
+    print(net.forward_loss(x, True))

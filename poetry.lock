@@ -993,6 +993,32 @@ optional = false
 python-versions = ">=3.10"
 
 [[package]]
+name = "kornia"
+version = "0.8.0"
+description = "Open Source Differentiable Computer Vision Library for PyTorch"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+kornia_rs = ">=0.1.0"
+packaging = "*"
+torch = ">=1.9.1"
+
+[package.extras]
+dev = ["accelerate", "coverage", "diffusers", "ivy (>=1.0.0.0)", "mypy", "numpy (<3)", "onnx", "onnxruntime", "pillow", "pre-commit (>=2)", "pytest (==8.3.4)", "pytest-timeout", "requests", "setuptools (>=61.2)", "transformers", "types-requests"]
+docs = ["furo", "ivy (>=1.0.0.0)", "kornia-moons", "matplotlib", "onnx", "onnxruntime", "opencv-python", "PyYAML (>=5.1)", "sphinx", "sphinx-autodoc-defaultargs", "sphinx-autodoc-typehints", "sphinx-copybutton (>=0.3)", "sphinx-design", "sphinx-notfound-page", "sphinxcontrib-bibtex", "sphinxcontrib-gtagjs", "sphinxcontrib-youtube"]
+x = ["accelerate", "onnxruntime-gpu (>=1.16)"]
+
+[[package]]
+name = "kornia-rs"
+version = "0.1.8"
+description = "Low level implementations for computer vision in Rust"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[[package]]
 name = "markdown"
 version = "3.7"
 description = "Python implementation of John Gruber's Markdown."
@@ -2309,7 +2335,7 @@ python-versions = ">=3.7"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "6c619eb8374a195e71014f241da6cdef49adfa75a7f5ce52de076d4328fa1130"
+content-hash = "5555fb90c79886396df4a8a86bde50e6bb9df7264539f392860352620c3c92a0"
 
 [metadata.files]
 absl-py = []
@@ -2381,6 +2407,8 @@ jupyterlab-pygments = []
 jupyterlab-server = []
 jupyterlab-widgets = []
 kiwisolver = []
+kornia = []
+kornia-rs = []
 markdown = []
 markupsafe = []
 matplotlib = []
