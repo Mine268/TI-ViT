@@ -78,5 +78,5 @@ def test_TI_ViT_forward_loss():
     net = TI_ViT("./models/facebook/converted-vit-base").cuda(1)
     x = torch.zeros(size=[4,3,224,224]).cuda(1)
 
-    print(net.forward_loss(x, False))
-    print(net.forward_loss(x, True))
+    print(net.forward(x, False))
+    print(net.forward(x, True))

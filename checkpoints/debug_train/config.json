@@ -1,0 +1,11 @@
+{
+    "exp": "debug_train",
+    "data": "COCO",
+    "model_dir": "./models/facebook/converted-vit-base/",
+    "epoch": 1,
+    "COCO_root": "/mnt/qnap/data/datasets/coco2017/train/images",
+    "img_size": 224,
+    "secondary_loss": true,
+    "batch_size": 8,
+    "lr": 0.001
+}

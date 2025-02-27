@@ -3,6 +3,7 @@
 smplx_models/*
 models/
 *.pth
+events.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

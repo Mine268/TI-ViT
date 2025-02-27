@@ -6,7 +6,21 @@ import json
 @dataclass
 class Config:
     # members
-    IMG_SIZE: int = 224
+    # experiment
+    exp: str
+    data: str
+    model_dir: str
+    epoch: int = 1
+
+    # data
+    COCO_root: str = r"/mnt/qnap/data/datasets/coco2017/train/images"
+    img_size: int = 224
+
+    # train
+    secondary_loss: bool=True
+    batch_size: int = 8
+    lr: float = 1e-4
+
 
     # member functions
     def update(self, other: Union['Config', Dict[str, Any]]):
@@ -33,14 +47,9 @@ class Config:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=4)
 
-    def __post_init__(self):
-        if isinstance(self.CAMERA_DEVIATION_RANGE, tuple) and len(self.CAMERA_DEVIATION_RANGE) == 2:
-            pass
-        elif isinstance(self.CAMERA_DEVIATION_RANGE, list) and len(self.CAMERA_DEVIATION_RANGE) == 2:
-            self.CAMERA_DEVIATION_RANGE = tuple(self.CAMERA_DEVIATION_RANGE)
-        else:
-            raise ValueError("Cannot init CAMERA_DEVICATION_RANGE as [low,high], found "
-                f"{self.CAMERA_DEVIATION_RANGE}")
 
-
-default_cfg = Config()
+default_cfg = Config(
+    exp="debug_train",
+    data="COCO",
+    model_dir="",
+)

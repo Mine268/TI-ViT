@@ -44,7 +44,7 @@ class TI_ViT(nn.Module):
         # latent transformation, default config
         self.trans_grp = ImageLatentTransformerGroup()
 
-    def forward_loss(self,
+    def forward(self,
         images: torch.Tensor,
         compute_secondary: bool=False,
     ) -> torch.Tensor:
@@ -76,13 +76,13 @@ class TI_ViT(nn.Module):
             self.trans_grp.do_cr(patches_origin, a)
         delta_hr = self.backbone(images_hr).last_hidden_state[:, 1:] - \
             self.trans_grp.do_hr(patches_origin, b)
-        loss_ordinary = \
+        loss_ordinary: torch.Tensor = \
             reduce(delta_hf.abs(), "b l d -> b", reduction="mean").mean() + \
             reduce(delta_cr.abs(), "b l d -> b", reduction="mean").mean() + \
             reduce(delta_hr.abs(), "b l d -> b", reduction="mean").mean()
 
         # Secondary Loss
-        loss_secondary = torch.tensor(0, dtype=dtype, device=device)
+        loss_secondary: torch.Tensor = torch.tensor(0, dtype=dtype, device=device)
         if compute_secondary:
             a1 = torch.rand(size=(batch_size,), dtype=dtype, device=device) * torch.pi * 2
             a2 = torch.rand(size=(batch_size,), dtype=dtype, device=device) * torch.pi * 2
@@ -107,4 +107,8 @@ class TI_ViT(nn.Module):
                 loss_secondary += reduce(delta_trans.abs(), "b l d -> b", reduction="mean").mean()
 
         loss = loss_ordinary + 1e-3 * loss_secondary
-        return loss
+        return {
+            "loss": loss,
+            "ordinary": loss_ordinary.item(),
+            "secondary": loss_secondary.item()
+        }

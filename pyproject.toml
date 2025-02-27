@@ -26,6 +26,7 @@ torchvision = "^0.21.0"
 pytest = "^8.3.4"
 opencv-python = "^4.11.0"
 kornia = "^0.8.0"
+nvitop = "^1.4.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.2.0"
