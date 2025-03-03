@@ -1657,6 +1657,18 @@ python-versions = "*"
 tests = ["pytest"]
 
 [[package]]
+name = "pycocotools"
+version = "2.0.8"
+description = "Official APIs for the MS-COCO dataset"
+category = "main"
+optional = false
+python-versions = ">=3.9"
+
+[package.dependencies]
+matplotlib = ">=2.1.0"
+numpy = "*"
+
+[[package]]
 name = "pycparser"
 version = "2.22"
 description = "C parser in Python"
@@ -2411,7 +2423,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "ec9d5e777662e3972ef9de4c0b0797490210d2a3537767e0177d2f39cd4c24ce"
+content-hash = "b71bb9179d398d9664d4c98544f5a2bc32fdf368dc22ccfacd3e9326d6fb437e"
 
 [metadata.files]
 absl-py = []
@@ -2532,6 +2544,7 @@ protobuf = []
 psutil = []
 ptyprocess = []
 pure-eval = []
+pycocotools = []
 pycparser = []
 pygments = []
 pyparsing = []
