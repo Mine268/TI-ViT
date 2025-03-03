@@ -2,6 +2,7 @@ from functools import partial
 from typing import Optional
 from itertools import product
 
+import json
 from einops import reduce
 import torch
 import torch.nn as nn
@@ -21,15 +22,18 @@ class TI_ViT(nn.Module):
     def __init__(
         self,
         pretrained_dir: Optional[str]=None,
+        config_path: Optional[str]=None,
     ):
         """TI_ViT
 
         Args:
             pretrained_dir (str): Path to the pretraining model. \
                 Defaults to "./models/facebook/vit-mae-base".
+            config_path (str): Path to architecture config file.
         """
         super(TI_ViT, self).__init__()
         self.pretrained_dir = pretrained_dir
+        self.config_path = config_path
         self.image_preprocessor = transforms.Compose([
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=False)
@@ -39,7 +43,12 @@ class TI_ViT(nn.Module):
         if pretrained_dir is not None:
             self.backbone = ViTModel.from_pretrained(self.pretrained_dir)
         else:
-            self.backbone = ViTModel(default_vit_cfg)
+            with open(self.config_path, "r") as f:
+                config = json.load(f)
+            self.backbone = ViTModel(ViTConfig(**config))
+
+        # hidden size
+        self.embed_dim: int = self.backbone.config.hidden_size
 
         # latent transformation, default config
         self.trans_grp = ImageLatentTransformerGroup()
@@ -112,3 +121,16 @@ class TI_ViT(nn.Module):
             "ordinary": loss_ordinary.item(),
             "secondary": loss_secondary.item()
         }
+
+    def encode(self, images: torch.Tensor) -> torch.Tensor:
+        """Encode the images into patches.
+
+        Args:
+            images (torch.Tensor): Tensor image between [0,1]. size=(B,C,H,W), where H=W=224.
+
+        Returns:
+            torch.Tensor: Patches, size=(B,(H//P * W//P),D).
+        """
+        images_norm = self.image_preprocessor(images)
+        patches = self.backbone(images_norm).last_hidden_state[:, 1:]
+        return patches

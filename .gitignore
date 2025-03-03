@@ -3,6 +3,7 @@
 smplx_models/*
 models/
 *.pth
+*.pt
 events.*
 
 # Byte-compiled / optimized / DLL files
