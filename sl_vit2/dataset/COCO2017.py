@@ -71,7 +71,7 @@ class COCO2017(Dataset):
     def __len__(self):
         return len(self.image_paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> torch.Tensor:
         img_path = self.image_paths[idx]
 
         try:
