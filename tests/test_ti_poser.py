@@ -14,14 +14,14 @@ def test_ti_poser():
     print()
 
     ti_poser = TI_MANOPoser(pretrained_path="checkpoints/debug_train/checkpoint_1.pt",
-                            vit_config_path="models/facebook/converted-vit-base/config.json").to("cuda:7")
-    images = torch.randn(size=(4,3,224,224)).to("cuda:7")
+                            vit_config_path="models/facebook/converted-vit-base/config.json").to("cuda:0")
+    images = torch.randn(size=(4,3,224,224)).to("cuda:0")
 
     y1 = ti_poser(images)
     breif_dict(y1)
 
-    cr = torch.randn(size=(4,)).to("cuda:7")
-    hr = torch.randn(size=(4,)).to("cuda:7")
+    cr = torch.randn(size=(4,)).to("cuda:0")
+    hr = torch.randn(size=(4,)).to("cuda:0")
 
     print("---")
     y2 = ti_poser(images, cr)

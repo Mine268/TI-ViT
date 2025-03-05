@@ -1,16 +1,16 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-# 
+#
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-# 
+#
 import numpy as np
 import cv2
 import random
 from ..config import cfg
 import math
 # from .mano import mano
-from utils import mano
+from ....utils import mano
 from .transforms import cam2pixel, transform_joint_to_other_db
 from plyfile import PlyData, PlyElement
 import torch
@@ -24,7 +24,7 @@ def load_img(path, order='RGB'):
 
     if order=='RGB':
         img = img[:,:,::-1].copy()
-    
+
     img = img.astype(np.float32)
     return img
 
@@ -36,7 +36,7 @@ def get_bbox(joint_img, joint_valid, extend_ratio=1.2):
     x_center = (xmin+xmax)/2.; width = xmax-xmin
     xmin = x_center - 0.5 * width * extend_ratio
     xmax = x_center + 0.5 * width * extend_ratio
-    
+
     y_center = (ymin+ymax)/2.; height = ymax-ymin
     ymin = y_center - 0.5 * height * extend_ratio
     ymax = y_center + 0.5 * height * extend_ratio
@@ -63,7 +63,7 @@ def crop_img(img: torch.Tensor, bbox_center, bbox_size, squarify=True, avoid_zer
     是水平方向和垂直方向的位置和长度。
     '''
     assert isinstance(img, torch.Tensor), "Only torch.Tensor image is supported"
-    
+
     w_center, h_center = bbox_center
     width, height = bbox_size
 
@@ -74,7 +74,7 @@ def crop_img(img: torch.Tensor, bbox_center, bbox_size, squarify=True, avoid_zer
     if avoid_zero:
         width = max(width, 2)  # ! use 2 instead of 1
         height = max(height, 2)
-    
+
     w_min = (w_center - width / 2)
     h_min = (h_center - height / 2)
     w_max = (w_center + width / 2)
@@ -107,7 +107,7 @@ def process_bbox(bbox, img_width, img_height, do_sanitize=True, extend_ratio=1.2
     bbox[3] = h*extend_ratio
     bbox[0] = c_x - bbox[2]/2.
     bbox[1] = c_y - bbox[3]/2.
-    
+
     bbox = bbox.astype(np.float32)
     return bbox
 
@@ -115,7 +115,7 @@ def get_aug_config():
     scale_factor = 0.25
     rot_factor = 30
     color_factor = 0.2
-    
+
     scale = np.clip(np.random.randn(), -1.0, 1.0) * scale_factor + 1.0
     rot = np.clip(np.random.randn(), -2.0,
                   2.0) * rot_factor if random.random() <= 0.6 else 0
@@ -131,14 +131,14 @@ def augmentation(img, bbox, data_split, enforce_flip=None):
         scale, rot, color_scale, do_flip = get_aug_config()
     else:
         scale, rot, color_scale, do_flip = 1.0, 0.0, np.array([1,1,1]), False
-    
+
     if enforce_flip is None:
         pass
     elif enforce_flip is True:
         do_flip = True
     elif enforce_flip is False:
         do_flip = False
-    
+
     img, trans, inv_trans = generate_patch_image(img, bbox, scale, rot, do_flip, cfg.input_img_shape)
     img = np.clip(img * color_scale[None,None,:], 0, 255)
     return img, trans, inv_trans, rot, do_flip
@@ -146,7 +146,7 @@ def augmentation(img, bbox, data_split, enforce_flip=None):
 def generate_patch_image(cvimg, bbox, scale, rot, do_flip, out_shape):
     img = cvimg.copy()
     img_height, img_width, img_channels = img.shape
-   
+
     bb_c_x = float(bbox[0] + 0.5*bbox[2])
     bb_c_y = float(bbox[1] + 0.5*bbox[3])
     bb_width = float(bbox[2])
@@ -197,7 +197,7 @@ def gen_trans_from_patch_cv(c_x, c_y, src_width, src_height, dst_width, dst_heig
     dst[0, :] = dst_center
     dst[1, :] = dst_center + dst_downdir
     dst[2, :] = dst_center + dst_rightdir
-    
+
     if inv:
         trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
     else:
@@ -211,7 +211,7 @@ def distort_projection_fisheye(point, focal, princpt, D):
 
     # distort
     point_ndc = point[:,:,:2] / z[:,:,None]
-    r = torch.sqrt(torch.sum(point_ndc ** 2, 2)) 
+    r = torch.sqrt(torch.sum(point_ndc ** 2, 2))
     theta = torch.atan(r)
     theta_d = theta * (
             1
@@ -317,21 +317,21 @@ def get_mano_data(mano_param, cam_param, do_flip, img_shape):
             hand_type = 'right'
 
     # apply camera extrinsic (rotation)
-    # merge root pose and camera rotation 
+    # merge root pose and camera rotation
     if 'R' in cam_param:
         R = np.array(cam_param['R'], dtype=np.float32).reshape(3,3)
         root_pose = pose[mano.orig_root_joint_idx,:].numpy()
         root_pose, _ = cv2.Rodrigues(root_pose)
         root_pose, _ = cv2.Rodrigues(np.dot(R,root_pose))
         pose[mano.orig_root_joint_idx] = torch.from_numpy(root_pose).view(3)
- 
+
     # flip pose parameter (axis-angle)
     if do_flip:
         for pair in mano.orig_flip_pairs:
             pose[pair[0], :], pose[pair[1], :] = pose[pair[1], :].clone(), pose[pair[0], :].clone()
         pose[:,1:3] *= -1 # multiply -1 to y and z axis of axis-angle
         trans[:,0] *= -1 # multiply -1
- 
+
     # get root joint coordinate
     root_pose = pose[mano.orig_root_joint_idx].view(1,3)
     hand_pose = torch.cat((pose[:mano.orig_root_joint_idx,:], pose[mano.orig_root_joint_idx+1:,:])).view(1,-1)
@@ -339,7 +339,7 @@ def get_mano_data(mano_param, cam_param, do_flip, img_shape):
         output = mano.layer[hand_type](betas=shape, hand_pose=hand_pose, global_orient=root_pose, transl=trans)
     mesh_coord = output.vertices[0].numpy()
     joint_coord = np.dot(mano.sh_joint_regressor, mesh_coord)
-    
+
     # bring geometry to the original (before flip) position
     if do_flip:
         flip_trans_x = joint_coord[mano.sh_root_joint_idx,0] * -2
@@ -378,8 +378,8 @@ def get_mano_data(mano_param, cam_param, do_flip, img_shape):
 def get_iou(box1, box2, form):
     box1 = box1.copy()
     box2 = box2.copy()
-    box1 = box1.reshape(-1,4) 
-    box2 = box2.reshape(-1,4) 
+    box1 = box1.reshape(-1,4)
+    box2 = box2.reshape(-1,4)
 
     if form == 'xyxy':
         pass
@@ -392,7 +392,7 @@ def get_iou(box1, box2, form):
     xmax = np.minimum(box1[:,2], box2[:,2])
     ymax = np.minimum(box1[:,3], box2[:,3])
     inter_area = np.maximum(0, xmax - xmin) * np.maximum(0, ymax - ymin)
- 
+
     box1_area = (box1[:,2] - box1[:,0]) * (box1[:,3] - box1[:,1])
     box2_area = (box2[:,2] - box2[:,0]) * (box2[:,3] - box2[:,1])
     union_area = box1_area + box2_area - inter_area

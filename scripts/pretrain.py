@@ -5,15 +5,17 @@ import os
 import json
 from copy import deepcopy
 
+import math
 import numpy as np
 import torch
+from torch.utils.data import random_split
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 
 from sl_vit2.config import *
-from sl_vit2.dataset import COCO2017
+from sl_vit2.dataset import COCO2017, Ego4DHandImage
 from sl_vit2.net import TI_ViT
 
 
@@ -40,6 +42,10 @@ def get_rank() -> int:
     return int(os.environ["LOCAL_RANK"])
 
 
+def get_world_size() -> int:
+    return int(os.environ["WORLD_SIZE"])
+
+
 def setup(rank: int, cfg: Config, print_func: Callable=print):
     """Setup training models and data
     """
@@ -54,7 +60,17 @@ def setup(rank: int, cfg: Config, print_func: Callable=print):
 
     # 1. init dataset
     if cfg.data == "COCO":
-        dataset = COCO2017(cfg.COCO_root, cfg.img_size)
+        dataset = COCO2017(
+            cfg.COCO_root,
+            cfg.img_size,
+        )
+    elif cfg.data == "ego4d":
+        dataset = Ego4DHandImage(
+            cfg.ego4d_root,
+            cfg.img_size,
+        )
+        desired_length = 32560 + 47125  # freihand + youtube3dhands
+        dataset, _ = random_split(dataset, [desired_length, len(dataset) - desired_length])
     dataloader = DataLoader(
         dataset=dataset,
         batch_size=cfg.batch_size,
@@ -71,7 +87,10 @@ def setup(rank: int, cfg: Config, print_func: Callable=print):
         output_device=rank,
         find_unused_parameters=True
     )
-    optimizer: torch.optim.Optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+    optimizer: torch.optim.Optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=math.sqrt(get_world_size() * cfg.batch_size) * cfg.lr
+    )
     # loss is computed by model itself
     # 2.1 read the ckpt if found
     if os.path.exists(f"./checkpoints/{cfg.exp}/checkpoint.pt"):
@@ -119,7 +138,7 @@ def train_one_epoch(
             if summary_writer is not None:
                 for key, value in losses.items():
                     summary_writer.add_scalar(
-                        key,
+                        f"train/{key}",
                         tensor_item(value),
                         global_step=epoch * len(dataloader) + it + 1
                     )
@@ -182,11 +201,13 @@ def main(rank: int, cfg: Config, print_func: Callable=print):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="train in ddp")
     parser.add_argument("--exp", type=str, required=True, help="Exp name")
-    parser.add_argument("--data", type=str, required=True, help="Data for train",
-        choices=["COCO"])
+    parser.add_argument(
+        "--data", type=str, required=True, help="Data for train", choices=["COCO", "ego4d"]
+    )
     parser.add_argument("--model_dir", type=str, required=False, help="Model ckpt path")
-    parser.add_argument("--secondary_loss", type=bool, required=True, help="Toggle secondary loss",
-        default=True)
+    parser.add_argument(
+        "--secondary_loss", type=bool, required=True, help="Toggle secondary loss", default=True
+    )
     args = parser.parse_args()
     exp_name: str = args.exp
 

@@ -10,15 +10,16 @@ class Config:
     exp: str
     data: str
     model_dir: str
-    epoch: int = 1
+    epoch: int = 30
 
     # data
     COCO_root: str = r"/mnt/qnap/data/datasets/coco2017/train/images"
+    ego4d_root: str = r"/mnt/qnap/data/datasets/ego4d_hand_sep60"
     img_size: int = 224
 
     # train
     secondary_loss: bool=True
-    batch_size: int = 8
+    batch_size: int = 11
     lr: float = 1e-4
 
 

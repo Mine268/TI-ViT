@@ -2,6 +2,7 @@
 .vscode/
 smplx_models/*
 models/
+**/__cache__
 *.pth
 *.pt
 events.*

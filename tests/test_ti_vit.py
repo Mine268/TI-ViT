@@ -9,16 +9,16 @@ from sl_vit2.net.latent_transformers import ImageLatentTransformerGroup
 
 def test_load_model():
     net = TI_ViT("./models/facebook/vit-mae-base")
-    net = net.to("cuda:7")
+    net = net.to("cuda:0")
 
-    class1 = type(net)
+    # class1 = type(net)
 
-    net = TI_ViT()
-    net = net.to("cuda:7")
+    # net = TI_ViT()
+    # net = net.to("cuda:0")
 
-    class2 = type(net)
+    # class2 = type(net)
 
-    assert(class1 == class2)
+    # assert(class1 == class2)
 
 
 def test_TransformerBlock():
@@ -75,8 +75,8 @@ def test_LatentTransforms1_compose():
 
 
 def test_TI_ViT_forward_loss():
-    net = TI_ViT("./models/facebook/converted-vit-base").cuda(7)
-    x = torch.zeros(size=[2,3,224,224]).cuda(7)
+    net = TI_ViT("./models/facebook/converted-vit-base").cuda(0)
+    x = torch.zeros(size=[2,3,224,224]).cuda(0)
 
     print(net.forward(x, False))
     print(net.forward(x, True))

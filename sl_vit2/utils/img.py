@@ -82,3 +82,98 @@ def hflip_rotate_img(imgs: torch.Tensor, degree: torch.Tensor) -> torch.Tensor:
     flipped_imgs = horizontal_flip_img(imgs)
     rotated_flipped_imgs = rotate_img(flipped_imgs, degree)
     return rotated_flipped_imgs
+
+
+def crop_tensor_with_normalized_box(
+    image_tensor: torch.Tensor,
+    crop_box: torch.Tensor|list,
+    output_size: tuple=None
+) -> torch.Tensor:
+    """
+    Crop an image tensor using normalized coordinates with aspect ratio adjustment.
+
+    Args:
+        image_tensor (torch.Tensor): Input tensor (C, H, W) or (B, C, H, W)
+        crop_box (Tensor/list): Normalized coordinates [x_min, y_min, x_max, y_max]
+        output_size (tuple): Target size (height, width)
+
+    Returns:
+        torch.Tensor: Cropped tensor with shape matching output_size
+    """
+    flag_single_image = image_tensor.dim() == 3
+    # Add batch dimension if needed
+    if image_tensor.dim() == 3:
+        image_tensor = image_tensor.unsqueeze(0)
+
+    # Convert to tensor and ensure batch dimension
+    if not isinstance(crop_box, torch.Tensor):
+        crop_box = torch.tensor(crop_box, device=image_tensor.device)
+    if crop_box.dim() == 1:
+        crop_box = crop_box.unsqueeze(0)
+
+    # Get original image dimensions
+    B, C, H, W = image_tensor.shape
+
+    # Convert to pixel coordinates
+    def create_box_points(x_min, y_min, x_max, y_max):
+        return torch.stack([
+            torch.stack([x_min, y_min], dim=1),  # Top-left
+            torch.stack([x_max, y_min], dim=1),  # Top-right
+            torch.stack([x_max, y_max], dim=1),  # Bottom-right
+            torch.stack([x_min, y_max], dim=1)   # Bottom-left
+        ], dim=1)
+
+    # Convert normalized coordinates to pixel values
+    pixel_box = crop_box * torch.tensor([W, H, W, H], device=crop_box.device)
+
+    # Aspect ratio adjustment logic
+    if output_size is not None:
+        target_h, target_w = output_size
+        target_ratio = target_w / target_h
+
+        # Unpack coordinates
+        x_min, y_min, x_max, y_max = pixel_box.unbind(dim=1)
+
+        # Calculate current dimensions
+        current_w = x_max - x_min
+        current_h = y_max - y_min
+        current_ratio = current_w / current_h
+
+        # Calculate center points
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
+
+        # Adjust width or height based on ratio comparison
+        mask = current_ratio < target_ratio
+        new_w = torch.where(mask, current_h * target_ratio, current_w)
+        new_h = torch.where(mask, current_h, current_w / target_ratio)
+
+        # Update coordinates
+        x_min = center_x - new_w / 2
+        x_max = center_x + new_w / 2
+        y_min = center_y - new_h / 2
+        y_max = center_y + new_h / 2
+
+        pixel_box = torch.stack([x_min, y_min, x_max, y_max], dim=1)
+
+    # Generate proper box points format for Kornia
+    x_min, y_min, x_max, y_max = pixel_box.unbind(dim=1)
+    boxes = create_box_points(x_min, y_min, x_max, y_max)
+
+    # Determine output size
+    if output_size is None:
+        output_size = ((y_max - y_min).int().mean().item(),  (x_max - x_min).int().mean().item())
+
+    # Perform cropping and resizing
+    cropped = kornia.geometry.transform.crop_and_resize(
+        image_tensor,
+        boxes,
+        output_size,
+        mode='bilinear'
+    )
+
+    # Remove batch dimension if needed
+    if flag_single_image:
+        cropped = cropped.squeeze(0)
+
+    return cropped
