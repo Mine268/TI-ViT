@@ -32,7 +32,8 @@ from .utils.transforms import world2cam, cam2pixel, transform_joint_to_other_db
 
 
 class InterHand26M(torch.utils.data.Dataset):
-    def __init__(self, transform, data_split):
+    def __init__(self, root, transform, data_split):
+        self.root = root
         self.post_transform = transform
         self.to_tensor_transform = transforms.Compose(
             [
@@ -43,8 +44,8 @@ class InterHand26M(torch.utils.data.Dataset):
             ]
         )
         self.data_split = data_split
-        self.img_path = osp.join("data", "InterHand26M", "images")
-        self.annot_path = osp.join("data", "InterHand26M", "annotations")
+        self.img_path = osp.join(self.root, "images")
+        self.annot_path = osp.join(self.root, "annotations")
 
         # IH26M joint set
         self.joint_set = {
@@ -146,6 +147,7 @@ class InterHand26M(torch.utils.data.Dataset):
         else:
             with open(
                 osp.join(
+                    "sl_vit2",
                     "dataset",
                     "InterHand26M",
                     "aid_human_annot_" + self.data_split + ".txt",

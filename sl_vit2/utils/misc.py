@@ -9,7 +9,7 @@ def breif_dict(output: dict, prefix=""):
         if isinstance(v, torch.Tensor):
             print(f"{prefix}{k}: tensor, {list(v.shape)}")
         elif isinstance(v, np.ndarray):
-            print(f"{prefix}{k}: array, {list(v.size)}")
+            print(f"{prefix}{k}: array, {list(v.shape)}")
         elif isinstance(v, (str, int, float, list, tuple)):
             print(f"{prefix}{k}: {type(v).__name__}, {v}")
         elif v is None:

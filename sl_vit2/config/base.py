@@ -15,12 +15,24 @@ class Config:
     # data
     COCO_root: str = r"/mnt/qnap/data/datasets/coco2017/train/images"
     ego4d_root: str = r"/mnt/qnap/data/datasets/ego4d_hand_sep60"
+    ih26m_root: str = r"/mnt/qnap/data/datasets/InterHand2.6M_5fps_batch1"
     img_size: int = 224
 
     # train
     secondary_loss: bool=True
     batch_size: int = 11
     lr: float = 1e-4
+    lr_min: float = 1e-6
+    optimizer: str = "adamw"
+    lr_scheduler: str = "warmup"
+
+    # cosine anneling
+    T_0: int = 10
+    T_mult: int = 2
+
+    # warmup
+    warmup_epoch: int = 1
+    cooldown_epoch: int = 10
 
 
     # member functions

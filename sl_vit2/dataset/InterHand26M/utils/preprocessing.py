@@ -10,7 +10,7 @@ import random
 from ..config import cfg
 import math
 # from .mano import mano
-from ....utils import mano
+from ....utils.mano import mano
 from .transforms import cam2pixel, transform_joint_to_other_db
 from plyfile import PlyData, PlyElement
 import torch
