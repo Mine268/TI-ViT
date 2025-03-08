@@ -13,6 +13,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
+from peft import LoraConfig, get_peft_model
 
 from sl_vit2.config import *
 from sl_vit2.dataset import COCO2017, Ego4DHandImage
@@ -83,23 +84,44 @@ def setup(rank: int, cfg: Config, print_func: Callable = print):
     )
 
     # 2. setup model
-    model = TI_ViT(cfg.model_dir)
+    model: TI_ViT = TI_ViT(cfg.model_dir)
     model.to(rank)
+    # if lora ft enabled
+    if cfg.ft_method == "lora":
+        lora_config = LoraConfig(
+            r=cfg.lora_rank,
+            lora_alpha=32,
+            target_modules=["query", "key", "value"],
+            lora_dropout=0.1,
+            bias="none",
+            modules_to_save=[]
+        )
+        model.backbone = get_peft_model(model.backbone, lora_config)
+        print_func("lora finetune for backbone enabled.")
+        print_func(model.backbone.print_trainable_parameters())
     model = DistributedDataParallel(
         model, device_ids=[rank], output_device=rank, find_unused_parameters=True
     )
 
+    optimizer: torch.optim.Optimizer = None
+    trainable_param_list = []
+    if cfg.ft_method == "lora":
+        trainable_param_list = [
+            {"params": model.module.trans_grp.parameters()},
+            {"params": model.module.backbone.parameters()}
+        ]
+    else:
+        trainable_param_list = [model.parameters()]
     max_lr = math.sqrt(get_world_size() * cfg.batch_size) * cfg.lr
     min_lr = math.sqrt(get_world_size() * cfg.batch_size) * cfg.lr_min
-    optimizer: torch.optim.Optimizer = None
     if cfg.optimizer == "adamw":
         optimizer = torch.optim.AdamW(
-            model.parameters(),
+            trainable_param_list,
             lr=max_lr,
         )
     elif cfg.optimizer == "sgd":
         optimizer = torch.optim.SGD(
-            model.parameters(),
+            trainable_param_list,
             lr=max_lr,
         )
 
@@ -286,6 +308,19 @@ if __name__ == "__main__":
         choices=["COCO", "ego4d"],
     )
     parser.add_argument("--model_dir", type=str, required=False, help="Model ckpt path")
+    parser.add_argument(
+        "--ft_method",
+        type=str,
+        required=False,
+        help="Training apporach",
+        choices=["full_param", "lora"]
+    )
+    parser.add_argument(
+        "--lora_rank",
+        type=int,
+        required=False,
+        default=4
+    )
     parser.add_argument(
         "--secondary_loss",
         type=bool,

@@ -19,12 +19,14 @@ class Config:
     img_size: int = 224
 
     # train
+    ft_method: str = "full_param"
     secondary_loss: bool=True
     batch_size: int = 11
     lr: float = 1e-4
     lr_min: float = 1e-6
     optimizer: str = "adamw"
     lr_scheduler: str = "warmup"
+    lora_rank: int = 4
 
     # cosine anneling
     T_0: int = 10

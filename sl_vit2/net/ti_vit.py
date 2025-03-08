@@ -3,6 +3,7 @@ from typing import Optional
 from itertools import product
 
 import json
+import math
 from einops import reduce
 import torch
 import torch.nn as nn
@@ -12,6 +13,25 @@ from transformers import ViTModel
 
 from .latent_transformers import ImageLatentTransformerGroup
 from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img
+
+
+class SupportLoss(nn.Module):
+    def __init__(self, support: float):
+        super().__init__()
+        self.support = support
+        self.inv_support = 1.0 / support
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        token_norms = torch.norm(tokens, p=2, dim=-1)
+        seq_avg_norms = torch.mean(token_norms, dim=-1)  # [N,]
+        mean_norm = torch.mean(seq_avg_norms)
+
+        delta = self.support - mean_norm
+
+        if delta > -1e-6:
+            return delta ** 2
+        else:
+            return -delta * torch.log(mean_norm * self.inv_support)
 
 
 # default vit config
@@ -49,6 +69,10 @@ class TI_ViT(nn.Module):
 
         # hidden size
         self.embed_dim: int = self.backbone.config.hidden_size
+
+        # support loss
+        self.support_distant: float = math.sqrt(2 * self.embed_dim)
+        self.support_loss = SupportLoss(self.support_distant)
 
         # latent transformation, default config
         self.trans_grp = ImageLatentTransformerGroup()
@@ -89,6 +113,13 @@ class TI_ViT(nn.Module):
             reduce(delta_hf.abs(), "b l d -> b", reduction="mean").mean() + \
             reduce(delta_cr.abs(), "b l d -> b", reduction="mean").mean() + \
             reduce(delta_hr.abs(), "b l d -> b", reduction="mean").mean()
+        loss_support: torch.Tensor = self.support_loss(
+            torch.cat([
+                delta_hf,
+                delta_cr,
+                delta_hr
+            ], dim=0)
+        )
 
         # Secondary Loss
         loss_secondary: torch.Tensor = torch.tensor(0, dtype=dtype, device=device)
@@ -115,10 +146,11 @@ class TI_ViT(nn.Module):
                     composed_op(patches_origin)
                 loss_secondary += reduce(delta_trans.abs(), "b l d -> b", reduction="mean").mean()
 
-        loss = loss_ordinary + 1e-3 * loss_secondary
+        loss = loss_ordinary + 1e-1 * loss_support + 1e-3 * loss_secondary
         return {
             "loss": loss,
             "ordinary": loss_ordinary.item(),
+            "support": loss_support.item(),
             "secondary": loss_secondary.item()
         }
 

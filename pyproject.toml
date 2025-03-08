@@ -35,6 +35,9 @@ backports-lzma = "^0.0.14"
 pylzma = "^0.5.0"
 pyturbojpeg = "^1.7.7"
 plyfile = "^1.1"
+ipykernel = "^6.29.5"
+ipympl = "^0.9.7"
+peft = "^0.14.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.2.0"

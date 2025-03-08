@@ -124,8 +124,8 @@ class TransformerBlock(nn.Module):
         self.pe = PositionalEncoding(dim, mode='absolute')
         self.attn = LoraCompatibleMHA(dim, num_heads)
         self.ffn = FeedForwardNetwork(dim)
-        self.norm1 = nn.LayerNorm(dim, eps=1e-3)
-        self.norm2 = nn.LayerNorm(dim, eps=1e-3)
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
 
     def forward(self, x):
         x = self.pe(x)
