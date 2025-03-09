@@ -53,7 +53,8 @@ def convert_vit_mae_to_vit(
             src_params = dict(src_module.named_parameters())
             for name, param in dst_module.named_parameters():
                 # 处理ViTMAE的layernorm后缀差异
-                normalized_name = name.replace('.ln_', '.norm.')
+                # normalized_name = name.replace('.ln_', '.norm.')
+                normalized_name = name
                 if normalized_name in src_params:
                     param.data.copy_(src_params[normalized_name].data)
                 elif name in src_params:
@@ -69,6 +70,9 @@ def convert_vit_mae_to_vit(
 
         # 迁移encoder
         transfer_parameters(mae_model.encoder, vit_model.encoder, "Encoder")
+
+        # 迁移layernorm
+        transfer_parameters(mae_model.layernorm, vit_model.layernorm, "LayerNorm")
 
         # 验证输出
         if verify:
@@ -133,6 +137,6 @@ def convert_vit_mae_to_vit(
 
 if __name__ == "__main__":
     convert_vit_mae_to_vit(
-        "./models/facebook/vit-mae-large",
-        "./models/facebook/converted-vit-large",
+        "./models/facebook/vit-mae-base",
+        "./models/facebook/converted-vit-base",
         verify=False)  # manually checked yes

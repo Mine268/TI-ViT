@@ -1,6 +1,13 @@
 import math
+from copy import deepcopy
+
 import torch
 import torch.nn as nn
+from transformers.models.vit_mae.modeling_vit_mae import (
+    ViTMAELayer,
+    get_2d_sincos_pos_embed,
+    ViTMAEDecoderOutput
+)
 
 
 class PositionalEncoding(nn.Module):
@@ -139,3 +146,143 @@ class TransformerBlock(nn.Module):
         x = x + y
         return x
 
+
+# ref: huggingface transformer
+# manually remove mask mechanics, compatible with origin ViTMAEDecoder checkpoint
+class ViTMAEDecoder_NoMask(nn.Module):
+    def __init__(self, config, num_patches):
+        super().__init__()
+        self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + 1, config.decoder_hidden_size), requires_grad=False
+        )  # fixed sin-cos embedding
+
+        decoder_config = deepcopy(config)
+        decoder_config.hidden_size = config.decoder_hidden_size
+        decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
+        decoder_config.num_attention_heads = config.decoder_num_attention_heads
+        decoder_config.intermediate_size = config.decoder_intermediate_size
+        self.decoder_layers = nn.ModuleList(
+            [ViTMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
+        )
+
+        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
+        self.decoder_pred = nn.Linear(
+            config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
+        )  # encoder to decoder
+        self.gradient_checkpointing = False
+        self.config = config
+        self.initialize_weights(num_patches)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
+        """
+        This method is a modified version of the interpolation function for ViT-mae model at the decoder, that
+        allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
+        resolution images.
+
+        Adapted from:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
+        # -1 removes the class dimension since we later append it without interpolation
+        embeddings_positions = embeddings.shape[1] - 1
+
+        # Separation of class token and patch tokens
+        class_pos_embed = self.decoder_pos_embed[:, :1]
+        patch_pos_embed = self.decoder_pos_embed[:, 1:]
+
+        # To retain the final 3d tensor with the required dimensions
+        dim = self.decoder_pos_embed.shape[-1]
+
+        # Increasing a dimension to enable bicubic interpolation
+        patch_pos_embed = patch_pos_embed.reshape(1, 1, -1, dim)
+
+        # permute to bring the dimension to be interpolated, to the last
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # Interpolating the decoder position embeddings shape wrt embeddings shape i.e (x).
+        # we keep the second last dimension constant
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(patch_pos_embed.shape[-2], embeddings_positions),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        # Converting back to the original shape
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        # Adding the class token back
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def initialize_weights(self, num_patches):
+        # initialize (and freeze) position embeddings by sin-cos embedding
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
+        )
+        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+
+        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+        torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
+
+    def forward(
+        self,
+        hidden_states,
+        # ids_restore,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+        interpolate_pos_encoding: bool = False,
+    ):
+        # embed tokens
+        x = self.decoder_embed(hidden_states)
+
+        # mask unshuffle is ignored
+
+        # add pos embed
+        if interpolate_pos_encoding:
+            decoder_pos_embed = self.interpolate_pos_encoding(x)
+        else:
+            decoder_pos_embed = self.decoder_pos_embed
+        hidden_states = x + decoder_pos_embed
+
+        # apply Transformer layers (blocks)
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        for i, layer_module in enumerate(self.decoder_layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
+                    hidden_states,
+                    None,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = self.decoder_norm(hidden_states)
+
+        # predictor projection
+        logits = self.decoder_pred(hidden_states)
+
+        # remove cls token
+        logits = logits[:, 1:, :]
+
+        if not return_dict:
+            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
+        return ViTMAEDecoderOutput(
+            logits=logits,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
