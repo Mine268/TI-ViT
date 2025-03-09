@@ -9,9 +9,9 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 from transformers import ViTConfig
-from transformers import ViTModel
 
 from .latent_transformers import ImageLatentTransformerGroup
+from .transformer_module import ViTModelFromMAE
 from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img
 
 
@@ -60,11 +60,11 @@ class TI_ViT(nn.Module):
 
         # load ViTMAE from  checkpoint, ignore decoder, follow PeCLR
         if pretrained_dir is not None:
-            self.backbone = ViTModel.from_pretrained(self.pretrained_dir)
+            self.backbone = ViTModelFromMAE.from_pretrained(self.pretrained_dir)
         else:
             with open(self.config_path, "r") as f:
                 config = json.load(f)
-            self.backbone = ViTModel(ViTConfig(**config))
+            self.backbone = ViTModelFromMAE(ViTConfig(**config))
 
         # hidden size
         self.embed_dim: int = self.backbone.config.hidden_size

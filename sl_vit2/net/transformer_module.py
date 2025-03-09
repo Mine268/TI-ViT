@@ -3,6 +3,7 @@ from copy import deepcopy
 
 import torch
 import torch.nn as nn
+from transformers import ViTModel
 from transformers.models.vit_mae.modeling_vit_mae import (
     ViTMAELayer,
     get_2d_sincos_pos_embed,
@@ -286,3 +287,11 @@ class ViTMAEDecoder_NoMask(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+
+# vit model converted from mae
+class ViTModelFromMAE(ViTModel):
+    def __init__(self, *args, **kwargs):
+        super(ViTModelFromMAE, self).__init__(*args, **kwargs)
+        # remove pooler, align with MAE vit
+        self.pooler = nn.Identity()
