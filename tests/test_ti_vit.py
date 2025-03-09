@@ -2,6 +2,7 @@ from functools import partial
 import cv2
 import torch
 from torchvision import transforms
+from peft import LoraConfig, get_peft_model
 
 from sl_vit2.net import TI_ViT
 from sl_vit2.net.latent_transformers import TransformerBlock
@@ -85,11 +86,22 @@ def test_TI_ViT_forward_loss():
 
 
 def test_TI_ViT_not_collapse():
+    device = torch.device("cpu")
     model = TI_ViT("models/facebook/converted-vit-base")
-    model.load_state_dict(
-        torch.load("checkpoints/pretrain_ego4d_20250307_1/checkpoint_1.pt")["model"]
+    # peft-lize
+    lora_config = LoraConfig(
+        r=1,
+        lora_alpha=32,
+        target_modules=["query", "key", "value"],
+        lora_dropout=0.1,
+        bias="none",
+        modules_to_save=[],
     )
-    model.to("cuda:0")
+    model.backbone = get_peft_model(model.backbone, lora_config)
+    model.load_state_dict(
+        torch.load("checkpoints/pretrain_ego4d_20250308_2/checkpoint_1.pt")["model"]
+    )
+    model.to(device)
     model.eval()
 
     preprocess = transforms.Compose([
@@ -103,8 +115,8 @@ def test_TI_ViT_not_collapse():
     img_rgb1 = cv2.cvtColor(img_bgr1, cv2.COLOR_BGR2RGB)
     img_tensor1 = preprocess(img_rgb1).unsqueeze(0)
     img_tensor1_hf = torch.flip(img_tensor1, dims=[-1])
-    patches1 = model.encode(img_tensor1.to("cuda:0"))
-    hf_patches1 = model.encode(img_tensor1_hf.to("cuda:0"))
+    patches1 = model.encode(img_tensor1.to(device))
+    hf_patches1 = model.encode(img_tensor1_hf.to(device))
     patches1_hf = model.trans_grp.do_hf(patches1)
 
     img_bgr2 = cv2.imread(
@@ -112,7 +124,7 @@ def test_TI_ViT_not_collapse():
     )
     img_rgb2 = cv2.cvtColor(img_bgr2, cv2.COLOR_BGR2RGB)
     img_tensor2 = preprocess(img_rgb2).unsqueeze(0)
-    patches2 = model.encode(img_tensor2.to("cuda:0"))
+    patches2 = model.encode(img_tensor2.to(device))
 
     def patch_delta(ps1: torch.Tensor, ps2: torch.Tensor) -> float:
         return ((ps1 - ps2) ** 2).sum(-1).sqrt().mean(-1).mean(-1).item()
@@ -122,6 +134,6 @@ def test_TI_ViT_not_collapse():
     print(f"patch hf norm: {patch_delta(patches1_hf, torch.zeros_like(patches1_hf))}")
     print(f"patch2 norm: {patch_delta(patches2, torch.zeros_like(patches2))}")
     print("---")
-    print(f"image hf: {patch_delta(patches1, hf_patches1)}")
-    print(f"pacth hf: {patch_delta(patches1, patches1_hf)}")
-    print(f"diff image: {patch_delta(patches1, patches2)}")
+    print(f"image hf diff: {patch_delta(patches1, hf_patches1)}")
+    print(f"pacth hf diff: {patch_delta(patches1, patches1_hf)}")
+    print(f"diff image diff: {patch_delta(patches1, patches2)}")

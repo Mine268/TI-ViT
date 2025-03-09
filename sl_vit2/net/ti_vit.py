@@ -23,8 +23,7 @@ class SupportLoss(nn.Module):
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
         token_norms = torch.norm(tokens, p=2, dim=-1)
-        seq_avg_norms = torch.mean(token_norms, dim=-1)  # [N,]
-        mean_norm = torch.mean(seq_avg_norms)
+        mean_norm = torch.mean(token_norms)
 
         delta = self.support - mean_norm
 
@@ -71,7 +70,7 @@ class TI_ViT(nn.Module):
         self.embed_dim: int = self.backbone.config.hidden_size
 
         # support loss
-        self.support_distant: float = math.sqrt(2 * self.embed_dim)
+        self.support_distant: float = math.sqrt(self.embed_dim)
         self.support_loss = SupportLoss(self.support_distant)
 
         # latent transformation, default config

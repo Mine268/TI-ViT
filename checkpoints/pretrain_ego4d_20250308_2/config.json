@@ -1,0 +1,22 @@
+{
+    "exp": "pretrain_ego4d_20250308_2",
+    "data": "ego4d",
+    "model_dir": "models/facebook/converted-vit-base",
+    "epoch": 30,
+    "COCO_root": "/mnt/qnap/data/datasets/coco2017/train/images",
+    "ego4d_root": "/mnt/qnap/data/datasets/ego4d_hand_sep60",
+    "ih26m_root": "/mnt/qnap/data/datasets/InterHand2.6M_5fps_batch1",
+    "img_size": 224,
+    "ft_method": "lora",
+    "secondary_loss": true,
+    "batch_size": 14,
+    "lr": 0.0001,
+    "lr_min": 1e-06,
+    "optimizer": "adamw",
+    "lr_scheduler": "warmup",
+    "lora_rank": 1,
+    "T_0": 10,
+    "T_mult": 2,
+    "warmup_epoch": 1,
+    "cooldown_epoch": 10
+}

@@ -21,7 +21,7 @@ class Config:
     # train
     ft_method: str = "full_param"
     secondary_loss: bool=True
-    batch_size: int = 11
+    batch_size: int = 14
     lr: float = 1e-4
     lr_min: float = 1e-6
     optimizer: str = "adamw"
