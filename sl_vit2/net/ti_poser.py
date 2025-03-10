@@ -41,7 +41,7 @@ class TI_MANOPoser(nn.Module):
 
         # create model
         self.backbone: TI_ViT = TI_ViT(
-            pretrained_dir=None, config_path=self.vit_config_path
+            backbone_ckpt_dir=None, backbone_arch_path=self.vit_config_path
         )
         self.embed_dim: int = self.backbone.embed_dim
 

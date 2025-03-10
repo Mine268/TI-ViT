@@ -10,6 +10,8 @@ class Config:
     exp: str
     data: str
     model_dir: str
+    decoder_config: str = ""
+    decoder_ckpt: str = ""
     epoch: int = 30
 
     # data
@@ -36,6 +38,11 @@ class Config:
     warmup_epoch: int = 1
     cooldown_epoch: int = 10
 
+    def __post_init__(self):
+        if self.decoder_config == "":
+            self.decoder_config = None
+        if self.decoder_ckpt == "":
+            self.decoder_ckpt = None
 
     # member functions
     def update(self, other: Union['Config', Dict[str, Any]]):
@@ -49,9 +56,9 @@ class Config:
         for key, value in merge_dict.items():
             if hasattr(self, key):
                 current_type = type(getattr(self, key))
-                if not isinstance(value, current_type):
-                    raise ValueError(f"Type mismatched: '{key}' expects {current_type.__name__}, "
-                        f"but received {type(value).__name__}.")
+                # if not isinstance(value, current_type):
+                #     raise ValueError(f"Type mismatched: '{key}' expects {current_type.__name__}, "
+                #         f"but received {type(value).__name__}.")
                 setattr(self, key, value)
             else:
                 raise KeyError(f"Unexpected key: {key}.")

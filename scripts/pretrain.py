@@ -84,46 +84,35 @@ def setup(rank: int, cfg: Config, print_func: Callable = print):
     )
 
     # 2. setup model
-    model: TI_ViT = TI_ViT(cfg.model_dir)
+    model: TI_ViT = TI_ViT(
+        backbone_ckpt_dir=cfg.model_dir,
+        backbone_arch_path=None,
+        decoder_ckpt_path=cfg.decoder_ckpt,
+        decoder_arch_path=cfg.decoder_config
+    )
     model.to(rank)
     # if lora ft enabled
     if cfg.ft_method == "lora":
-        lora_config = LoraConfig(
-            r=cfg.lora_rank,
-            lora_alpha=32,
-            target_modules=["query", "key", "value"],
-            lora_dropout=0.1,
-            bias="none",
-            modules_to_save=[]
+        model = TI_ViT.setup_lora_model(
+            model,
+            backbone_target_modules=["query", "key", "value"],
+            backbone_lora_rank=cfg.lora_rank,
+            decoder_target_modules=["value"],
+            decoder_lora_rank=cfg.lora_rank
         )
-        model.backbone = get_peft_model(model.backbone, lora_config)
-        print_func("lora finetune for backbone enabled.")
-        print_func(model.backbone.print_trainable_parameters())
     model = DistributedDataParallel(
-        model, device_ids=[rank], output_device=rank, find_unused_parameters=True
+        model, device_ids=[rank], output_device=rank, find_unused_parameters=False
     )
 
     optimizer: torch.optim.Optimizer = None
-    trainable_param_list = []
-    if cfg.ft_method == "lora":
-        trainable_param_list = [
-            {"params": model.module.trans_grp.parameters()},
-            {"params": model.module.backbone.parameters()}
-        ]
-    else:
-        trainable_param_list = [model.parameters()]
+    Optimizer: Type = None
     max_lr = math.sqrt(get_world_size() * cfg.batch_size) * cfg.lr
     min_lr = math.sqrt(get_world_size() * cfg.batch_size) * cfg.lr_min
     if cfg.optimizer == "adamw":
-        optimizer = torch.optim.AdamW(
-            trainable_param_list,
-            lr=max_lr,
-        )
+        Optimizer = torch.optim.AdamW
     elif cfg.optimizer == "sgd":
-        optimizer = torch.optim.SGD(
-            trainable_param_list,
-            lr=max_lr,
-        )
+        Optimizer = torch.optim.SGD
+    optimizer = Optimizer(model.parameters(), lr=max_lr)
 
     scheduler: torch.optim.lr_scheduler.LRScheduler = None
     in_epoch_scheduler: bool = False
@@ -308,6 +297,20 @@ if __name__ == "__main__":
         choices=["COCO", "ego4d"],
     )
     parser.add_argument("--model_dir", type=str, required=False, help="Model ckpt path")
+    parser.add_argument(
+        "--decoder_config",
+        type=str,
+        required=False,
+        default="",
+        help="Path to decoder arch config json file"
+    )
+    parser.add_argument(
+        "--decoder_ckpt",
+        type=str,
+        required=False,
+        default="",
+        help="Path to decoder checkpoint"
+    )
     parser.add_argument(
         "--ft_method",
         type=str,

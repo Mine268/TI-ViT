@@ -1,24 +1,27 @@
 from functools import partial
-from typing import Optional
+from typeguard import typechecked
+from typing import Optional, List
 from itertools import product
 
 import json
 import math
-from einops import reduce
+from einops import reduce, rearrange
 import torch
 import torch.nn as nn
 from torchvision import transforms
-from transformers import ViTConfig
+from peft import LoraConfig, get_peft_model
+from transformers import ViTConfig, ViTMAEConfig
 
 from .latent_transformers import ImageLatentTransformerGroup
-from .transformer_module import ViTModelFromMAE
+from .transformer_module import ViTModelFromMAE, ViTMAEDecoder_NoMask
 from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img
 
 
 class SupportLoss(nn.Module):
-    def __init__(self, support: float):
+    def __init__(self, support: float, alpha: float=1e-3):
         super().__init__()
         self.support = support
+        self.alpha = alpha
         self.inv_support = 1.0 / support
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -28,7 +31,7 @@ class SupportLoss(nn.Module):
         delta = self.support - mean_norm
 
         if delta > -1e-6:
-            return delta ** 2
+            return self.alpha * delta ** 2
         else:
             return -delta * torch.log(mean_norm * self.inv_support)
 
@@ -38,43 +41,104 @@ default_vit_cfg = ViTConfig()
 
 
 class TI_ViT(nn.Module):
+    @classmethod
+    @typechecked
+    def setup_lora_model(
+        cls,
+        model: "TI_ViT",
+        backbone_target_modules: List = ["query", "key", "value"],
+        backbone_lora_rank: int = 1,
+        decoder_target_modules: Optional[List] = None,
+        decoder_lora_rank: Optional[int] = None,
+    ) -> "TI_ViT":
+        backbone_lora_config = LoraConfig(
+            r=backbone_lora_rank,
+            lora_alpha=32,
+            target_modules=backbone_target_modules,
+            lora_dropout=0.1,
+            bias="none",
+            modules_to_save=[]
+        )
+        model.backbone = get_peft_model(model.backbone, backbone_lora_config)
+        if decoder_target_modules is not None and decoder_lora_rank is not None:
+            decoder_lora_config = LoraConfig(
+                r=decoder_lora_rank,
+                lora_alpha=32,
+                target_modules=decoder_target_modules,
+                lora_dropout=0.1,
+                bias="none",
+                modules_to_save=[]
+            )
+            model.decoder = get_peft_model(model.decoder, decoder_lora_config)
+        else:
+            model.decoder.eval()
+        return model
+
     def __init__(
         self,
-        pretrained_dir: Optional[str]=None,
-        config_path: Optional[str]=None,
+        backbone_ckpt_dir: Optional[str]=None,
+        backbone_arch_path: Optional[str]=None,
+        decoder_ckpt_path: Optional[str]=None,
+        decoder_arch_path: Optional[str]=None,
     ):
         """TI_ViT
 
         Args:
-            pretrained_dir (str): Path to the pretraining model. \
+            backbone_ckpt_dir (str): Path to the pretraining model. \
                 Defaults to "./models/facebook/vit-mae-base".
-            config_path (str): Path to architecture config file.
+            backbone_arch_path (str): Path to architecture config json file.
+            decoder_arch_path: (str): Path to decoder architecture json file. Leaving `None` will \
+                ignore the decoder and reconstruction loss during pretraining.
+            decoder_ckpt_path (str): Path to decoder checkpoint file.
         """
         super(TI_ViT, self).__init__()
-        self.pretrained_dir = pretrained_dir
-        self.config_path = config_path
+        self.backbone_ckpt_dir = backbone_ckpt_dir
+        self.backbone_arch_path = backbone_arch_path
+        self.decoder_ckpt_path = decoder_ckpt_path
+        self.decoder_arch_path = decoder_arch_path
         self.image_preprocessor = transforms.Compose([
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=False)
         ])
 
+        # --- Backbone part ---
         # load ViTMAE from  checkpoint, ignore decoder, follow PeCLR
-        if pretrained_dir is not None:
-            self.backbone = ViTModelFromMAE.from_pretrained(self.pretrained_dir)
+        if backbone_ckpt_dir is not None:
+            self.backbone = ViTModelFromMAE.from_pretrained(self.backbone_ckpt_dir)
         else:
-            with open(self.config_path, "r") as f:
-                config = json.load(f)
-            self.backbone = ViTModelFromMAE(ViTConfig(**config))
+            with open(self.backbone_arch_path, "r") as f:
+                backbone_config = json.load(f)
+            self.backbone = ViTModelFromMAE(ViTConfig(**backbone_config))
 
         # hidden size
         self.embed_dim: int = self.backbone.config.hidden_size
+        self.img_size: int = self.backbone.config.image_size
+        self.patch_size: int = self.backbone.config.patch_size
+        self.num_p: int = self.img_size // self.patch_size
+        self.num_patches: int = self.num_p ** 2
+
+        # --- Decoder part ---
+        self.decoder: nn.Module = nn.Identity()
+        self.enable_decoder: bool = False
+        if decoder_arch_path is not None:
+            if self.decoder_arch_path is not None:
+                with open(self.decoder_arch_path, "r") as f:
+                    decoder_config = json.load(f)
+            else:
+                decoder_config = {}
+            self.decoder = ViTMAEDecoder_NoMask(
+                ViTMAEConfig(**decoder_config),
+                self.num_patches
+            )
+            self.decoder.load_state_dict(torch.load(self.decoder_ckpt_path))
+            self.enable_decoder = True
+
+        # --- Latent transformation part ---
+        self.trans_grp = ImageLatentTransformerGroup()
 
         # support loss
         self.support_distant: float = math.sqrt(self.embed_dim)
         self.support_loss = SupportLoss(self.support_distant)
-
-        # latent transformation, default config
-        self.trans_grp = ImageLatentTransformerGroup()
 
     def forward(self,
         images: torch.Tensor,
@@ -93,9 +157,23 @@ class TI_ViT(nn.Module):
 
         # origin patches
         images_norm = self.image_preprocessor(images)
-        patches_origin = self.backbone(images_norm).last_hidden_state[:, 1:]
+        tokens = self.backbone(images_norm).last_hidden_state
+        patches_origin = tokens[:, 1:]
 
-        # Ordinary Loss
+        # --- Reconstruction Loss ---
+        loss_recons: torch.Tensor = torch.tensor(0, dtype=dtype, device=device)
+        if self.enable_decoder:
+            images_recons = self.decoder(tokens).logits
+            images_norm_patches = rearrange(
+                images_norm,
+                "n c (h p) (w q) -> n (h w) (p q c)",
+                c=3,
+                h=self.num_p, w=self.num_p,
+                p=self.patch_size, q=self.patch_size
+            )
+            loss_recons = (images_recons - images_norm_patches).abs().mean(-1).mean()
+
+        # --- Ordinary Loss ---
         a = torch.rand(size=(batch_size,), dtype=dtype, device=device) * torch.pi * 2
         b = torch.rand(size=(batch_size,), dtype=dtype, device=device) * torch.pi * 2
         # generate ordinary transformed images
@@ -120,7 +198,7 @@ class TI_ViT(nn.Module):
             ], dim=0)
         )
 
-        # Secondary Loss
+        # --- Secondary Loss ---
         loss_secondary: torch.Tensor = torch.tensor(0, dtype=dtype, device=device)
         if compute_secondary:
             a1 = torch.rand(size=(batch_size,), dtype=dtype, device=device) * torch.pi * 2
@@ -145,12 +223,13 @@ class TI_ViT(nn.Module):
                     composed_op(patches_origin)
                 loss_secondary += reduce(delta_trans.abs(), "b l d -> b", reduction="mean").mean()
 
-        loss = loss_ordinary + 1e-1 * loss_support + 1e-3 * loss_secondary
+        loss = (loss_ordinary + 1e-1 * loss_support) + 1e-3 * loss_secondary + 1e-3 * loss_recons
         return {
             "loss": loss,
             "ordinary": loss_ordinary.item(),
             "support": loss_support.item(),
-            "secondary": loss_secondary.item()
+            "secondary": loss_secondary.item(),
+            "recons": loss_recons.item(),
         }
 
     def encode(self, images: torch.Tensor) -> torch.Tensor:

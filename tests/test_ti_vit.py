@@ -99,7 +99,7 @@ def test_TI_ViT_not_collapse():
     )
     model.backbone = get_peft_model(model.backbone, lora_config)
     model.load_state_dict(
-        torch.load("checkpoints/pretrain_ego4d_20250308_2/checkpoint_1.pt")["model"]
+        torch.load("checkpoints/pretrain_ego4d_20250309_1/checkpoint_3.pt")["model"]
     )
     model.to(device)
     model.eval()
