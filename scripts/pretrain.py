@@ -13,6 +13,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 from peft import LoraConfig, get_peft_model
 
 from sl_vit2.config import *
@@ -196,12 +197,23 @@ def train_one_epoch(
         if log_every is not None and (it + 1) % log_every == 0:
             # log to tensorboard
             if summary_writer is not None:
-                for key, value in losses.items():
+                # plot scalars
+                for key, value in losses["log"]["scalar"].items():
                     summary_writer.add_scalar(
                         f"train/{key}",
                         tensor_item(value),
                         global_step=epoch * len(dataloader) + it + 1,
                     )
+                # plot imgs
+                for key, value in losses["log"]["image"].items():
+                    if value is not None:
+                        img_grid = make_grid(value, nrow=3)
+                        summary_writer.add_image(
+                            f"train/{key}",
+                            img_grid,
+                            global_step=epoch * len(dataloader) + it + 1,
+                        )
+                # plot learning rate
                 summary_writer.add_scalar(
                     "train/lr",
                     optimizer.param_groups[0]["lr"],

@@ -14,7 +14,7 @@ from transformers import ViTConfig, ViTMAEConfig
 
 from .latent_transformers import ImageLatentTransformerGroup
 from .transformer_module import ViTModelFromMAE, ViTMAEDecoder_NoMask
-from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img
+from ..utils.img import horizontal_flip_img, rotate_img, hflip_rotate_img, denormalize
 
 
 class SupportLoss(nn.Module):
@@ -163,7 +163,7 @@ class TI_ViT(nn.Module):
         # --- Reconstruction Loss ---
         loss_recons: torch.Tensor = torch.tensor(0, dtype=dtype, device=device)
         if self.enable_decoder:
-            images_recons = self.decoder(tokens).logits
+            images_recons: torch.Tensor = self.decoder(tokens).logits
             images_norm_patches = rearrange(
                 images_norm,
                 "n c (h p) (w q) -> n (h w) (p q c)",
@@ -223,13 +223,43 @@ class TI_ViT(nn.Module):
                     composed_op(patches_origin)
                 loss_secondary += reduce(delta_trans.abs(), "b l d -> b", reduction="mean").mean()
 
-        loss = (loss_ordinary + 1e-1 * loss_support) + 1e-3 * loss_secondary + 1e-3 * loss_recons
+        loss = (loss_ordinary + 1e-1 * loss_support) + 1e-3 * loss_secondary + 1e-1 * loss_recons
+
+        # --- Vis ---
+        if self.enable_decoder:
+            vis_batch = min(4, batch_size)
+            img_orig_vis = images[:vis_batch].detach().cpu()  # [N,C,H,W]
+            img_recons_vis = images_recons[:vis_batch].detach().cpu()  # [N,L,D]
+            img_recons_vis = rearrange(
+                img_recons_vis,
+                "n (h w) (p q c) -> n c (h p) (w q)",
+                c=3,
+                h=self.num_p, w=self.num_p,
+                p=self.patch_size, q=self.patch_size
+            )  # [N,C,H,W]
+            img_cat = torch.cat([img_orig_vis, img_recons_vis], dim=-1)
+            img_cat = denormalize(
+                img_cat,
+                mean=torch.tensor([0.485, 0.456, 0.406]),
+                std=torch.tensor([0.229, 0.224, 0.225])
+            )
+        else:
+            img_cat = None
+
         return {
             "loss": loss,
-            "ordinary": loss_ordinary.item(),
-            "support": loss_support.item(),
-            "secondary": loss_secondary.item(),
-            "recons": loss_recons.item(),
+            "log": {
+                "scalar": {
+                    "total": loss.item(),
+                    "ordinary": loss_ordinary.item(),
+                    "support": loss_support.item(),
+                    "secondary": loss_secondary.item(),
+                    "recons": loss_recons.item(),
+                },
+                "image": {
+                    "recons_compare": img_cat
+                }
+            }
         }
 
     def encode(self, images: torch.Tensor) -> torch.Tensor:

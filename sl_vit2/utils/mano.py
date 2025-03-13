@@ -33,7 +33,7 @@ class MANO(object):
         }
         self.layer = {
             "right": smplx.create(
-                "./smplx_models",
+                "../smplx_models",
                 "mano",
                 is_rhand=True,
                 use_pca=False,
@@ -41,7 +41,7 @@ class MANO(object):
                 **self.layer_arg
             ),
             "left": smplx.create(
-                "./smplx_models",
+                "../smplx_models",
                 "mano",
                 is_rhand=False,
                 use_pca=False,

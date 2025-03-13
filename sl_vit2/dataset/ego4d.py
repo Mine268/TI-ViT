@@ -1,5 +1,6 @@
 from typing import *
 
+import cv2
 import os
 import pickle as pkl
 import json
@@ -48,9 +49,9 @@ class Ego4DHandImage(Dataset):
 
         # read annotations
         self.annotations = []
-        if os.path.exists("./sl_vit2/dataset/__cache__/ego4d.pkl"):
-            Path("./sl_vit2/dataset/__cache__").mkdir(exist_ok=True)
-            with open("./sl_vit2/dataset/__cache__/ego4d.pkl", "rb") as f:
+        if os.path.exists(os.path.join(os.path.dirname(__file__), "__cache__", "ego4d.pkl")):
+            Path(os.path.join(os.path.dirname(__file__), "__cache__")).mkdir(exist_ok=True)
+            with open(os.path.join(os.path.dirname(__file__), "__cache__", "ego4d.pkl"), "rb") as f:
                 self.annotations = pkl.load(f)
         else:
             for annot_file in self.annot_root.iterdir():
@@ -82,7 +83,8 @@ class Ego4DHandImage(Dataset):
         # read entire image
         try:
             with open((self.image_root / annot["frame_path"]).as_posix(), "rb") as f:
-                image = self.jpeg_decoder.decode(f.read())  # image in numpy
+                image = self.jpeg_decoder.decode(f.read())  # image in numpy BGR
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # convert to RGB
             image = self.base_transform(image)  # to torch [C,H,W]
 
             # crop according to bbox
