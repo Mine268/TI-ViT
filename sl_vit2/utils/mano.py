@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+import os
 import numpy as np
 import torch
 import smplx
@@ -33,7 +34,7 @@ class MANO(object):
         }
         self.layer = {
             "right": smplx.create(
-                "../smplx_models",
+                os.path.join(os.path.dirname(__file__), "../../smplx_models"),
                 "mano",
                 is_rhand=True,
                 use_pca=False,
@@ -41,7 +42,7 @@ class MANO(object):
                 **self.layer_arg
             ),
             "left": smplx.create(
-                "../smplx_models",
+                os.path.join(os.path.dirname(__file__), "../../smplx_models"),
                 "mano",
                 is_rhand=False,
                 use_pca=False,

@@ -84,6 +84,35 @@ def hflip_rotate_img(imgs: torch.Tensor, degree: torch.Tensor) -> torch.Tensor:
     return rotated_flipped_imgs
 
 
+def expand_bbox(
+    bbox: list,
+    scale: float
+) -> list:
+    """
+    Expand the bbox by scale, keeping central point.
+
+    Args:
+        bbox (list): [xmin, ymin, xmax, ymax]
+    """
+    x1, y1, x2, y2 = bbox
+
+    center_x = (x1 + x2) / 2
+    center_y = (y1 + y2) / 2
+
+    width = x2 - x1
+    height = y2 - y1
+
+    new_width = width * scale
+    new_height = height * scale
+
+    new_x1 = center_x - new_width / 2
+    new_y1 = center_y - new_height / 2
+    new_x2 = center_x + new_width / 2
+    new_y2 = center_y + new_height / 2
+
+    return [new_x1, new_y1, new_x2, new_y2]
+
+
 def crop_tensor_with_normalized_box(
     image_tensor: torch.Tensor,
     crop_box: torch.Tensor|list,

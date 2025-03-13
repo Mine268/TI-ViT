@@ -10,7 +10,7 @@ import torch
 from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 
-from sl_vit2.utils.img import crop_tensor_with_normalized_box
+from sl_vit2.utils.img import crop_tensor_with_normalized_box, expand_bbox
 from sl_vit2.utils.misc import to_tuple
 
 
@@ -21,6 +21,7 @@ class Ego4DHandImage(Dataset):
         self,
         root: str,
         img_size: int | Tuple = 224,
+        bbox_rescale: float=2.0,
         default_augment: bool = True,
         custom_transform: None | Callable = None,
     ):
@@ -28,6 +29,7 @@ class Ego4DHandImage(Dataset):
         self.root = Path(root)
         self.image_root = self.root / "images"
         self.annot_root = self.root / "annotations"
+        self.bbox_rescale = bbox_rescale
         self.jpeg_decoder = TurboJPEG()
         self.image_size: Tuple[int, int] = to_tuple(img_size)
 
@@ -66,13 +68,13 @@ class Ego4DHandImage(Dataset):
                                 "frame_path": frame_annot["image_path"],
                                 "bbox": [
                                     bbox["bbox"]["x_min"],  # width
-                                    bbox["bbox"]["x_max"],
                                     bbox["bbox"]["y_min"],  # height
+                                    bbox["bbox"]["x_max"],
                                     bbox["bbox"]["y_max"],
                                 ],
                             }
                         )
-            with open("./sl_vit2/dataset/__cache__/ego4d.pkl", "wb") as f:
+            with open(os.path.join(os.path.dirname(__file__), "__cache__", "ego4d.pkl"), "wb") as f:
                 pkl.dump(self.annotations, f)
 
     def __len__(self):
@@ -88,8 +90,9 @@ class Ego4DHandImage(Dataset):
             image = self.base_transform(image)  # to torch [C,H,W]
 
             # crop according to bbox
+            bbox = expand_bbox(annot["bbox"], self.bbox_rescale)
             crop = crop_tensor_with_normalized_box(
-                image, crop_box=annot["bbox"], output_size=self.image_size
+                image, crop_box=bbox, output_size=self.image_size
             )  # [C,HO,WO]
 
             # transformation
