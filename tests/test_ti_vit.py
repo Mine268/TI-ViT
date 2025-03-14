@@ -2,7 +2,7 @@ from functools import partial
 import cv2
 import torch
 from torchvision import transforms
-from peft import LoraConfig, get_peft_model
+from einops import reduce
 
 from sl_vit2.net import TI_ViT
 from sl_vit2.net.latent_transformers import TransformerBlock
@@ -87,20 +87,24 @@ def test_TI_ViT_forward_loss():
 
 def test_TI_ViT_not_collapse():
     device = torch.device("cpu")
-    model = TI_ViT("models/facebook/converted-vit-base")
+    model = TI_ViT(
+        backbone_ckpt_dir="models/facebook/converted-vit-base",
+        backbone_arch_path=None,
+        decoder_ckpt_path="models/facebook/vit-mae-base-decoder/vit-mae-base-decoder.pth",
+        decoder_arch_path="models/facebook/vit-mae-base-decoder/config.json",
+    )
     # peft-lize
-    lora_config = LoraConfig(
-        r=1,
-        lora_alpha=32,
-        target_modules=["query", "key", "value"],
-        lora_dropout=0.1,
-        bias="none",
-        modules_to_save=[],
+    model = TI_ViT.setup_lora_model(
+        model,
+        backbone_target_modules=["query", "key", "value"],
+        backbone_lora_rank=1,
+        decoder_target_modules=["value"],
+        decoder_lora_rank=1,
     )
-    model.backbone = get_peft_model(model.backbone, lora_config)
     model.load_state_dict(
-        torch.load("checkpoints/pretrain_ego4d_20250309_1/checkpoint_3.pt")["model"]
+        torch.load("checkpoints/pretrain_ego4d_20250313_1/checkpoint.pt")["model"]
     )
+    model = TI_ViT.merge_lora_model(model)
     model.to(device)
     model.eval()
 
@@ -127,13 +131,13 @@ def test_TI_ViT_not_collapse():
     patches2 = model.encode(img_tensor2.to(device))
 
     def patch_delta(ps1: torch.Tensor, ps2: torch.Tensor) -> float:
-        return ((ps1 - ps2) ** 2).sum(-1).sqrt().mean(-1).mean(-1).item()
+        return reduce((ps1 - ps2).abs(), "b l d -> b", reduction="mean").mean()
 
-    print(f"patch norm: {patch_delta(patches1, torch.zeros_like(patches1))}")
-    print(f"hf patch norm: {patch_delta(hf_patches1, torch.zeros_like(hf_patches1))}")
-    print(f"patch hf norm: {patch_delta(patches1_hf, torch.zeros_like(patches1_hf))}")
-    print(f"patch2 norm: {patch_delta(patches2, torch.zeros_like(patches2))}")
+    print(f"\nPatch norm for image1: {patch_delta(patches1, torch.zeros_like(patches1))}")
+    print(f"Patch norm for flipped image 1: {patch_delta(hf_patches1, torch.zeros_like(hf_patches1))}")
+    print(f"Norm for flipped patch of image 1: {patch_delta(patches1_hf, torch.zeros_like(patches1_hf))}")
+    print(f"Patch norm for image2: {patch_delta(patches2, torch.zeros_like(patches2))}")
     print("---")
-    print(f"image hf diff: {patch_delta(patches1, hf_patches1)}")
-    print(f"pacth hf diff: {patch_delta(patches1, patches1_hf)}")
-    print(f"diff image diff: {patch_delta(patches1, patches2)}")
+    print(f"Diff norm between flipped image: {patch_delta(patches1, hf_patches1)}")
+    print(f"Diff norm between flipped patch: {patch_delta(patches1, patches1_hf)}")
+    print(f"Diff norm between different images: {patch_delta(patches1, patches2)}")

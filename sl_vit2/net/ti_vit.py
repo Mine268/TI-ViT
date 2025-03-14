@@ -9,8 +9,9 @@ from einops import reduce, rearrange
 import torch
 import torch.nn as nn
 from torchvision import transforms
-from peft import LoraConfig, get_peft_model
 from transformers import ViTConfig, ViTMAEConfig
+from peft import LoraConfig, get_peft_model
+from peft.peft_model import PeftModel
 
 from .latent_transformers import ImageLatentTransformerGroup
 from .transformer_module import ViTModelFromMAE, ViTMAEDecoder_NoMask
@@ -72,6 +73,20 @@ class TI_ViT(nn.Module):
             model.decoder = get_peft_model(model.decoder, decoder_lora_config)
         else:
             model.decoder.eval()
+        return model
+
+    @classmethod
+    @typechecked
+    def merge_lora_model(
+        cls,
+        model: "TI_ViT",
+    ) -> "TI_ViT":
+        if isinstance(model.backbone, PeftModel) and \
+            isinstance(model.backbone.peft_config, LoraConfig):
+            model.backbone = model.backbone.merge_and_unload()
+        if isinstance(model.decoder, PeftModel) and \
+            isinstance(model.decoder.peft_config, LoraConfig):
+            model.decoder = model.decoder.merge_and_unload()
         return model
 
     def __init__(
